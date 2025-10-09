@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { generateFractal } = require('../fractal');
+const { generateFractal } = require('../services/fractalGenerationService.js');
 const crypto = require('crypto');
 const { verifyToken } = require('./auth.js');
 const Fractal = require('../models/fractal.model.js');
