@@ -1,6 +1,5 @@
 import os
 import requests
-import json
 import jwt
 from dotenv import load_dotenv
 import os
