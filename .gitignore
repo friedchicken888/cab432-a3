@@ -1,0 +1,4 @@
+/node_modules
+/fractals
+fractal.db
+.env
