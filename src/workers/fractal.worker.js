@@ -54,7 +54,7 @@ async function processMessage(message) {
     }
 
     const { options, hash, user } = job;
-    console.log(`\n----------------------------------------\n[${new Date().toISOString()}] Processing job for hash: ${hash}`);
+    console.log(`Generation request received for hash ${hash} from user ${user.username}`);
 
     try {
         const buffer = await generateFractal(options);
@@ -63,10 +63,13 @@ async function processMessage(message) {
             return;
         }
 
+        console.log(`Storing fractal image in S3 for hash ${hash}...`);
         const s3Key = await s3Service.uploadFile(buffer, 'image/png', 'fractals', hash);
+        console.log(`Storing fractal metadata in database for hash ${hash}...`);
         const fractalData = { ...options, hash, s3Key };
 
         const { id: newFractalId } = await Fractal.createFractal(fractalData);
+        console.log(`Adding fractal to user's history and gallery for hash ${hash}...`);
         await History.createHistoryEntry(user.id, user.username, newFractalId);
         await Gallery.addToGallery(user.id, newFractalId, hash);
 

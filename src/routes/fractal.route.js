@@ -44,6 +44,7 @@ router.get('/fractal', verifyToken, async (req, res) => {
     };
 
     const hash = crypto.createHash('sha256').update(JSON.stringify(options)).digest('hex');
+    console.log(`Fractal generation request received for hash ${hash} from user ${req.user.username}`);
 
     try {
         let row = await Fractal.findFractalByHash(hash);
@@ -86,6 +87,7 @@ router.get('/fractal', verifyToken, async (req, res) => {
 
             await sqsClient.send(command);
 
+            console.log(`Fractal generation request for hash ${hash} by user ${req.user.username} sent to queue.`);
             res.status(202).json({ hash, message: 'Fractal generation has been queued.' });
         }
     } catch (error) {
