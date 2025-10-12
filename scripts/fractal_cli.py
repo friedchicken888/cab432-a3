@@ -89,6 +89,8 @@ def confirm_signup(username, confirmation_code):
         return False
 
 def generate_fractal():
+    import time
+
     if not current_token:
         print("Please log in first.")
         return
@@ -104,7 +106,7 @@ def generate_fractal():
     scale = input("Scale (default 1): ")
     offset_x = input("Offset X (default 0): ")
     offset_y = input("Offset Y (default 0): ")
-    colour_scheme = input("Colour Scheme (rainbow, grayscale, fire, hsl - default rainbow): ")
+    colour_scheme = input("Colour Scheme (rainbow, greyscale, fire, hsl - default rainbow): ")
 
     params = {}
     if width: params["width"] = int(width)
@@ -120,17 +122,49 @@ def generate_fractal():
 
     headers = {"Authorization": f"Bearer {current_token}"}
     try:
-        r = requests.get(f"{BASE_URL}/fractal", headers=headers, params=params, timeout=180)
+        # Initial request to queue the fractal
+        print("\nSubmitting fractal generation request...")
+        r = requests.get(f"{BASE_URL}/fractal", headers=headers, params=params, timeout=30)
         r.raise_for_status()
         data = r.json()
-        fractal_url = data.get('url')
-        fractal_hash = data.get('hash')
-        if fractal_url:
-            print(f"\nFractal generated successfully! URL: {fractal_url}")
-        elif fractal_hash:
-            print(f"\nFractal generated successfully! Hash: {fractal_hash}")
+
+        # If the fractal was cached and returned immediately
+        if r.status_code == 200 and data.get('url'):
+            print(f"\nFractal retrieved from cache successfully! URL: {data.get('url')}")
+            return
+
+        # If the fractal was queued, we get a hash and need to poll
+        if r.status_code == 202 and data.get('hash'):
+            fractal_hash = data.get('hash')
+            print("Your fractal is being generated with the following parameters:")
+            print(params if params else "Default parameters")
+            print(f"Polling for result (hash: {fractal_hash})", end="")
+
+            POLL_INTERVAL = 5  # seconds
+            MAX_ATTEMPTS = 40  # 40 attempts * 5 seconds = 200 seconds ( > 3 min timeout)
+            
+            for i in range(MAX_ATTEMPTS):
+                try:
+                    status_r = requests.get(f"{BASE_URL}/fractal/status/{fractal_hash}", headers=headers, timeout=10)
+                    status_r.raise_for_status()
+                    status_data = status_r.json()
+
+                    if status_data.get('status') == 'complete':
+                        print(f"\n\nFractal generated successfully! URL: {status_data.get('url')}")
+                        return
+                    else:  # status is 'pending'
+                        print(".", end="", flush=True)
+                        time.sleep(POLL_INTERVAL)
+
+                except requests.exceptions.RequestException as poll_e:
+                    print(f"\nError while polling for status: {poll_e}")
+                    time.sleep(POLL_INTERVAL)
+            
+            print("\n\nFractal generation timed out after more than 3 minutes.")
+
         else:
-            print(f"\nFractal generated successfully! Unexpected response: {data}")
+            print(f"\nUnexpected response from server: {data}")
+
     except requests.exceptions.RequestException as e:
         print(f"\nFractal generation failed: {e}")
         if e.response is not None:
@@ -338,56 +372,86 @@ def delete_gallery_entry():
             print(f"HTTP Status Code: {e.response.status_code}")
             print(f"Response Body: {e.response.text}")
 
+def get_quick_login_users():
+    """Scans environment variables to build a dictionary of quick login users."""
+    users = {}
+    
+    # Admin is key '0', if present
+    admin_user = os.getenv('ADMIN_NAME')
+    if admin_user:
+        users['0'] = admin_user
+
+    # Find all numbered users, key is their number as a string
+    i = 1
+    while True:
+        user = os.getenv(f'USER_{i}_NAME')
+        if user:
+            users[str(i)] = user
+            i += 1
+        else:
+            break
+            
+    return users
+
 def quick_login():
     global current_token, current_user_info
     clear_terminal()
     print("\n--- Quick Login ---")
-    print("1. Login as Regular User")
-    print("2. Login as Admin")
-    choice = input("\nEnter your choice: ")
-
-    username = ""
-    password = ""
-
-    if choice == "1":
-        username = os.getenv('USER_1_NAME')
-        password = os.getenv('USER_PASSWORD')
-        if not username or not password:
-            print("Error: USER_1_NAME or USER_PASSWORD not set in .env")
-            input("Press Enter to continue...")
-            return
-    elif choice == "2":
-        username = os.getenv('ADMIN_NAME')
-        password = os.getenv('TEST_PASSWORD')
-        if not username or not password:
-            print("Error: ADMIN_NAME or TEST_PASSWORD not set in .env")
-            input("Press Enter to continue...")
-            return
-    else:
-        print("Invalid choice.")
+    
+    password = os.getenv('TEST_PASSWORD')
+    if not password:
+        print("Error: TEST_PASSWORD not set in .env file.")
         input("Press Enter to continue...")
         return
 
-    if login(username, password):
-        user_menu()
-        current_user_info = None
-        current_token = None
+    available_users = get_quick_login_users()
+    if not available_users:
+        print("No quick login users found in .env file.")
+        print("Please set ADMIN_NAME or USER_1_NAME, etc.")
+        input("Press Enter to continue...")
+        return
+
+    # Display menu with custom numbering
+    if '0' in available_users:
+        print(f"0. Login as {available_users['0']}")
+    
+    i = 1
+    while True:
+        if str(i) in available_users:
+            print(f"{i}. Login as {available_users[str(i)]}")
+            i += 1
+        else:
+            break
+
+    choice = input("\nEnter your choice: ")
+
+    if choice in available_users:
+        username = available_users[choice]
+        if login(username, password):
+            user_menu()
+            current_user_info = None
+            current_token = None
+        else:
+            input("\nPress Enter to continue...")
     else:
-        input("\nPress Enter to continue...")
+        print("Invalid choice.")
+        input("Press Enter to continue...")
 
 def auth_menu():
     global current_user_info, current_token
     while True:
         clear_terminal()
         print("\n--- Authentication Menu ---")
-        print("1. Login")
-        print("2. Sign Up")
-        print("3. Confirm Sign Up")
-        print("4. Quick Login")
+        print("1. Quick Login")
+        print("2. Manual Login")
+        print("3. Sign Up")
+        print("4. Confirm Sign Up")
         print("5. Exit")
         choice = input("\nEnter your choice: ")
 
         if choice == "1":
+            quick_login()
+        elif choice == "2":
             clear_terminal()
             print("\n--- Login ---")
             username = input("Enter username: ")
@@ -398,7 +462,7 @@ def auth_menu():
                 current_token = None
             else:
                 input("\nPress Enter to continue...")
-        elif choice == "2":
+        elif choice == "3":
             clear_terminal()
             print("\n--- Sign Up ---")
             username = input("Enter username: ")
@@ -406,15 +470,13 @@ def auth_menu():
             password = input("Enter password: ")
             signup(username, email, password)
             input("\nPress Enter to continue...")
-        elif choice == "3":
+        elif choice == "4":
             clear_terminal()
             print("\n--- Confirm Sign Up ---")
             username = input("Enter username: ")
             confirmation_code = input("Enter confirmation code from email: ")
             confirm_signup(username, confirmation_code)
             input("\nPress Enter to continue...")
-        elif choice == "4":
-            quick_login()
         elif choice == "5":
             clear_terminal()
             print("\nExiting CLI. Goodbye!")

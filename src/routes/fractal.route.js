@@ -94,4 +94,22 @@ router.get('/fractal', verifyToken, async (req, res) => {
     }
 });
 
+router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
+    const { hash } = req.params;
+
+    try {
+        const row = await Fractal.findFractalByHash(hash);
+
+        if (row) {
+            const fractalUrl = await s3Service.getPresignedUrl(row.s3_key);
+            res.json({ status: 'complete', url: fractalUrl });
+        } else {
+            res.json({ status: 'pending' });
+        }
+    } catch (error) {
+        console.error(`Error checking status for hash ${hash}:`, error);
+        res.status(500).send("Internal server error");
+    }
+});
+
 module.exports = router;
