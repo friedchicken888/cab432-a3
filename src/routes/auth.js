@@ -147,7 +147,7 @@ router.post('/login', async (req, res) => {
     }
 
     const params = {
-        AuthFlow: 'TEST_PASSWORD_AUTH',
+        AuthFlow: 'USER_PASSWORD_AUTH',
         ClientId: CLIENT_ID,
         AuthParameters: {
             USERNAME: username,
