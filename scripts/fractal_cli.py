@@ -350,17 +350,17 @@ def quick_login():
     password = ""
 
     if choice == "1":
-        username = os.getenv('USER_USERNAME')
+        username = os.getenv('USER_1_NAME')
         password = os.getenv('USER_PASSWORD')
         if not username or not password:
-            print("Error: USER_USERNAME or USER_PASSWORD not set in .env")
+            print("Error: USER_1_NAME or USER_PASSWORD not set in .env")
             input("Press Enter to continue...")
             return
     elif choice == "2":
-        username = os.getenv('ADMIN_USERNAME')
-        password = os.getenv('ADMIN_PASSWORD')
+        username = os.getenv('ADMIN_NAME')
+        password = os.getenv('TEST_PASSWORD')
         if not username or not password:
-            print("Error: ADMIN_USERNAME or ADMIN_PASSWORD not set in .env")
+            print("Error: ADMIN_NAME or TEST_PASSWORD not set in .env")
             input("Press Enter to continue...")
             return
     else:
