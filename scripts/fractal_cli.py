@@ -130,13 +130,13 @@ def generate_fractal():
 
         # If the fractal was cached and returned immediately
         if r.status_code == 200 and data.get('url'):
-            print(f"\nFractal retrieved from cache successfully! URL: {data.get('url')}")
+            print(f"\n\x1b]8;;{data.get('url')}\x1b\\Fractal retrieved from cache successfully!\x1b]8;;\x1b\\")
             return
 
         # If the fractal was queued, we get a hash and need to poll
         if r.status_code == 202 and data.get('hash'):
             fractal_hash = data.get('hash')
-            print(f"Your fractal (hash: {fractal_hash}) is being generated...")
+            print(f"Your fractal (hash: {fractal_hash}) is being generated.\n")
 
             POLL_INTERVAL = 5  # seconds
             MAX_ATTEMPTS = 40  # 40 attempts * 5 seconds = 200 seconds ( > 3 min timeout)
@@ -148,7 +148,7 @@ def generate_fractal():
                     status_data = status_r.json()
 
                     if status_data.get('status') == 'complete':
-                        print(f"\n\nFractal generated successfully! URL: {status_data.get('url')}")
+                        print(f"\n\n\x1b]8;;{status_data.get('url')}\x1b\\Fractal generated successfully!\x1b]8;;\x1b\\")
                         return
                     else:  # status is 'pending'
                         print(".", end="", flush=True)
@@ -321,7 +321,7 @@ def view_data(view_type="my_gallery", limit=None, offset=None, filters=None, sor
                         found_entry = next((e for e in data if e.get('id') == selected_id), None)
                         if found_entry:
                             if found_entry.get('url'):
-                                print(f"\nURL for ID {selected_id}: {found_entry['url']}\n")
+                                print(f"\n\x1b]8;;{found_entry['url']}\x1b\\Click here to open fractal with ID {selected_id}\x1b]8;;\x1b\\")
                             else:
                                 print(f"\nNo URL available for ID {selected_id} (fractal might be deleted).\n")
                         else:
