@@ -2,7 +2,6 @@ import asyncio
 import aiohttp
 import time
 import random
-import sys
 import os
 from dotenv import load_dotenv
 
@@ -81,21 +80,58 @@ async def user_worker(username, password):
             job_count += 1
             params = get_random_params()
             req_start_time = time.time()
-            print(f'[{username}] Starting job {job_count}...')
+            print(f'\n[{username}] Starting job {job_count}...')
             
             try:
-                # Make the request and wait for the full response from the server
-                async with session.get(FRACTAL_URL, params=params, headers=headers, timeout=300) as resp:
+                # Initial request to queue or get a cached fractal
+                async with session.get(FRACTAL_URL, params=params, headers=headers, timeout=30) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if data.get('url'):
+                            req_time = time.time() - req_start_time
+                            print(f'[{username}] Job {job_count} (cached) completed in {req_time:.2f}s.')
+                            continue # Go to the next job in the loop
+
+                    if resp.status == 202:
+                        data = await resp.json()
+                        fractal_hash = data.get('hash')
+                        if fractal_hash:
+                            # Start polling logic
+                            POLL_INTERVAL = 5  # seconds
+                            MAX_ATTEMPTS = 40  # 40 attempts * 5 seconds = 200 seconds
+                            print(f'[{username}] Job {job_count} queued. Polling for result... ', end="", flush=True)
+
+                            for i in range(MAX_ATTEMPTS):
+                                try:
+                                    async with session.get(f"{BASE_URL}/api/fractal/status/{fractal_hash}", headers=headers, timeout=10) as status_resp:
+                                        if status_resp.status == 200:
+                                            status_data = await status_resp.json()
+                                            if status_data.get('status') == 'complete':
+                                                req_time = time.time() - req_start_time
+                                                print(f"\n[{username}] Job {job_count} (generated) completed in {req_time:.2f}s.")
+                                                break # Exit polling loop and start next job
+                                            else: # status is pending
+                                                print(".", end="", flush=True)
+                                                await asyncio.sleep(POLL_INTERVAL)
+                                        else:
+                                            print("x", end="", flush=True)
+                                            await asyncio.sleep(POLL_INTERVAL)
+                                except asyncio.TimeoutError:
+                                    print("p", end="", flush=True) # Polling timeout
+                                    await asyncio.sleep(POLL_INTERVAL)
+                            else: # This else belongs to the for loop, executes if the loop finishes without break
+                                req_time = time.time() - req_start_time
+                                print(f"\n[{username}] Job {job_count} timed out after {req_time:.2f}s of polling.")
+                        continue # Go to the next job in the main while loop
+
+                    # Handle other non-200/202 initial responses
                     req_time = time.time() - req_start_time
-                    if resp.status == 200 or resp.status == 202:
-                        print(f'[{username}] Job {job_count} completed (Status {resp.status}) in {req_time:.2f}s.')
-                    else:
-                        text = await resp.text()
-                        print(f'[{username}] Job {job_count} failed (Status {resp.status}) in {req_time:.2f}s: {text}')
+                    text = await resp.text()
+                    print(f'[{username}] Job {job_count} failed on initial request (Status {resp.status}) in {req_time:.2f}s: {text}')
 
             except asyncio.TimeoutError:
                 req_time = time.time() - req_start_time
-                print(f'[{username}] Job {job_count} timed out waiting for server response after {req_time:.2f}s.')
+                print(f'[{username}] Job {job_count} initial request timed out after {req_time:.2f}s.')
             except aiohttp.ClientError as e:
                 req_time = time.time() - req_start_time
                 print(f'[{username}] Job {job_count} failed with client error after {req_time:.2f}s: {e}')

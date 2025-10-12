@@ -49,16 +49,17 @@ async function processMessage(message) {
     try {
         job = JSON.parse(message.Body);
     } catch (e) {
-        console.error('Failed to parse message body:', e);
+        console.error('\n--- ERROR ---\nFailed to parse message body:', e);
         return;
     }
 
     const { options, hash, user } = job;
+    console.log(`\n----------------------------------------\n[${new Date().toISOString()}] Processing job for hash: ${hash}`);
 
     try {
         const buffer = await generateFractal(options);
         if (!buffer) {
-            console.error(`Fractal generation timed out or failed for hash: ${hash}`);
+            console.error(`[${new Date().toISOString()}] Fractal generation timed out or failed for hash: ${hash}\n----------------------------------------`);
             return;
         }
 
@@ -74,17 +75,18 @@ async function processMessage(message) {
         const adminCacheKey = `admin:gallery:${JSON.stringify({})}:added_at:DESC:5:0`;
         await cacheService.del(adminCacheKey);
 
-        console.log(`Successfully processed and stored fractal with hash: ${hash}`);
+        console.log(`[${new Date().toISOString()}] Successfully processed and stored fractal with hash: ${hash}`);
 
         const deleteCommand = new DeleteMessageCommand({
             QueueUrl: queueUrl,
             ReceiptHandle: message.ReceiptHandle,
         });
         await sqsClient.send(deleteCommand);
-        console.log(`Message for hash ${hash} deleted from queue.`);
+        console.log(`[${new Date().toISOString()}] Message for hash ${hash} deleted from queue.\n----------------------------------------`);
 
     } catch (error) {
-        console.error(`Failed to process job for hash ${hash}:`, error);
+        console.error(`\n--- ERROR ---\n[${new Date().toISOString()}] Failed to process job for hash ${hash}:`, error);
+        console.error('----------------------------------------');
     }
 }
 

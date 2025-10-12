@@ -136,9 +136,7 @@ def generate_fractal():
         # If the fractal was queued, we get a hash and need to poll
         if r.status_code == 202 and data.get('hash'):
             fractal_hash = data.get('hash')
-            print("Your fractal is being generated with the following parameters:")
-            print(params if params else "Default parameters")
-            print(f"Polling for result (hash: {fractal_hash})", end="")
+            print(f"Your fractal (hash: {fractal_hash}) is being generated...")
 
             POLL_INTERVAL = 5  # seconds
             MAX_ATTEMPTS = 40  # 40 attempts * 5 seconds = 200 seconds ( > 3 min timeout)
