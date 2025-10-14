@@ -76,6 +76,10 @@ router.get('/fractal', verifyToken, async (req, res) => {
                 } else {
                     return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed after multiple attempts. Please try again later.' });
                 
+                }
+            } else {
+                return res.status(200).json({ hash: row.hash, status: row.status, message: `Fractal is ${row.status}. Check status endpoint for updates.` });
+            }
         } else {
             if (!queueUrl) {
                 return res.status(500).send('Service is not initialised correctly.');
