@@ -38,7 +38,7 @@ router.get('/gallery', verifyToken, async (req, res) => {
             if (entry.s3_key) {
                 entry.url = await s3Service.getPresignedUrl(entry.s3_key);
             }
-            return entry;
+            return { ...entry };
         }));
 
         const responseData = {

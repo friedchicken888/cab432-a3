@@ -3,7 +3,7 @@ const db = require('../database.js');
 exports.getHistoryForUser = (userId) => {
     return new Promise((resolve, reject) => {
         const sql = `
-        SELECT h.id, h.username, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", h.generated_at, (f.id IS NULL) AS fractal_deleted
+        SELECT h.id, h.username, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", h.generated_at, h.status, (f.id IS NULL) AS fractal_deleted
         FROM history h
         LEFT JOIN fractals f ON h.fractal_id = f.id
         WHERE h.user_id = $1
@@ -16,10 +16,10 @@ exports.getHistoryForUser = (userId) => {
     });
 };
 
-exports.createHistoryEntry = (userId, username, fractalId) => {
+exports.createHistoryEntry = (userId, username, fractalId, status = 'pending') => {
     return new Promise((resolve, reject) => {
-        const sql = "INSERT INTO history (user_id, username, fractal_id) VALUES ($1, $2, $3) RETURNING id";
-        db.query(sql, [userId, username, fractalId], (err, result) => {
+        const sql = "INSERT INTO history (user_id, username, fractal_id, status) VALUES ($1, $2, $3, $4) RETURNING id";
+        db.query(sql, [userId, username, fractalId, status], (err, result) => {
             if (err) return reject(err);
             resolve({ id: result.rows[0].id });
         });
@@ -30,6 +30,26 @@ exports.getHistoryEntry = (id, userId) => {
     return new Promise((resolve, reject) => {
         const sql = "SELECT fractal_id FROM history WHERE id = $1 AND user_id = $2";
         db.query(sql, [id, userId], (err, result) => {
+            if (err) return reject(err);
+            resolve(result.rows[0]);
+        });
+    });
+};
+
+exports.updateHistoryStatus = (historyId, status) => {
+    return new Promise((resolve, reject) => {
+        const sql = "UPDATE history SET status = $2 WHERE id = $1";
+        db.query(sql, [historyId, status], (err, result) => {
+            if (err) return reject(err);
+            resolve(result);
+        });
+    });
+};
+
+exports.getHistoryEntryByFractalIdAndUserId = (fractalId, userId) => {
+    return new Promise((resolve, reject) => {
+        const sql = "SELECT id FROM history WHERE fractal_id = $1 AND user_id = $2";
+        db.query(sql, [fractalId, userId], (err, result) => {
             if (err) return reject(err);
             resolve(result.rows[0]);
         });
@@ -90,7 +110,7 @@ exports.getAllHistory = (filters, sortBy, sortOrder, limit, offset) => {
             const totalCount = parseInt(countResult.rows[0].totalCount);
 
             const dataSql = `
-                SELECT h.id, h.user_id, h.username, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", h.generated_at, f.s3_key, (f.id IS NULL) AS fractal_deleted
+                SELECT h.id, h.user_id, h.username, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", h.generated_at, h.status, f.s3_key, (f.id IS NULL) AS fractal_deleted
                 FROM history h
                 LEFT JOIN fractals f ON h.fractal_id = f.id
                 ${whereSql}

@@ -6,20 +6,17 @@ exports.findFractalByHash = async (hash) => {
     let cachedFractal = await cacheService.get(cacheKey);
 
     if (cachedFractal) {
-        // Verify if the cached fractal still exists in the database
         const dbFractal = await exports.getFractalById(cachedFractal.id);
         if (dbFractal) {
-            return dbFractal; // Cached entry is valid and exists in DB
+            return dbFractal;
         } else {
-            // Cached entry is stale, remove it
             await cacheService.del(cacheKey);
-            cachedFractal = null; // Force DB lookup
+            cachedFractal = null;
         }
     }
 
-    // If not in cache, or cache was stale, query the database
     return new Promise((resolve, reject) => {
-        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key FROM fractals WHERE hash = $1";
+        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key, status, created_at, last_updated, retry_count FROM fractals WHERE hash = $1";
         db.query(sql, [hash], (err, result) => {
             if (err) return reject(err);
             const fractal = result.rows[0];
@@ -33,13 +30,13 @@ exports.findFractalByHash = async (hash) => {
 
 exports.createFractal = (data) => {
     return new Promise((resolve, reject) => {
-        const sql = `INSERT INTO fractals (hash, width, height, iterations, power, c_real, c_imag, scale, "offsetX", "offsetY", "colourScheme", s3_key) 
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`;
-        const params = [data.hash, data.width, data.height, data.maxIterations, data.power, data.c.real, data.c.imag, data.scale, data.offsetX, data.offsetY, data.colourScheme, data.s3Key];
+        const sql = `INSERT INTO fractals (hash, width, height, iterations, power, c_real, c_imag, scale, "offsetX", "offsetY", "colourScheme", s3_key, status, retry_count) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`;
+        const params = [data.hash, data.width, data.height, data.maxIterations, data.power, data.c.real, data.c.imag, data.scale, data.offsetX, data.offsetY, data.colourScheme, data.hash, 'pending', 0];
         db.query(sql, params, (err, result) => {
             if (err) return reject(err);
             const newFractalId = result.rows[0].id;
-            cacheService.del(`fractal:hash:${data.hash}`); // Invalidate cache for this hash
+            cacheService.del(`fractal:hash:${data.hash}`);
             resolve({ id: newFractalId });
         });
     });
@@ -78,10 +75,32 @@ exports.deleteFractal = async (id) => {
 
 exports.getFractalById = (id) => {
     return new Promise((resolve, reject) => {
-        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key FROM fractals WHERE id = $1";
+        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key, status, created_at, last_updated, retry_count FROM fractals WHERE id = $1";
         db.query(sql, [id], (err, result) => {
             if (err) return reject(err);
             resolve(result.rows[0]);
+        });
+    });
+};
+
+exports.updateFractalStatus = (hash, status, retryCount) => {
+    return new Promise((resolve, reject) => {
+        const sql = "UPDATE fractals SET status = $2, last_updated = CURRENT_TIMESTAMP, retry_count = $3 WHERE hash = $1";
+        db.query(sql, [hash, status, retryCount], (err, result) => {
+            if (err) return reject(err);
+            cacheService.del(`fractal:hash:${hash}`);
+            resolve(result);
+        });
+    });
+};
+
+exports.updateFractalS3Key = (hash, s3Key) => {
+    return new Promise((resolve, reject) => {
+        const sql = "UPDATE fractals SET s3_key = $2, last_updated = CURRENT_TIMESTAMP WHERE hash = $1";
+        db.query(sql, [hash, s3Key], (err, result) => {
+            if (err) return reject(err);
+            cacheService.del(`fractal:hash:${hash}`);
+            resolve(result);
         });
     });
 };

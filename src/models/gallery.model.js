@@ -53,7 +53,7 @@ exports.getGalleryForUser = (userId, filters, sortBy, sortOrder, limit, offset) 
             const totalCount = parseInt(countResult.rows[0].totalCount);
 
             const dataSql = `
-                SELECT g.id, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", g.added_at, g.fractal_hash, f.s3_key
+                SELECT g.id, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", g.added_at, g.fractal_hash, f.s3_key, f.status
                 FROM gallery g
                 JOIN fractals f ON g.fractal_id = f.id
                 ${whereSql}
@@ -163,7 +163,7 @@ exports.getAllGallery = (filters, sortBy, sortOrder, limit, offset) => {
             const totalCount = parseInt(countResult.rows[0].totalCount);
 
             const dataSql = `
-                SELECT g.id, g.user_id, (SELECT DISTINCT h_sub.username FROM history h_sub WHERE h_sub.user_id = g.user_id LIMIT 1) AS username, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", g.added_at, g.fractal_hash, f.s3_key
+                SELECT g.id, g.user_id, (SELECT DISTINCT h_sub.username FROM history h_sub WHERE h_sub.user_id = g.user_id LIMIT 1) AS username, f.hash, f.width, f.height, f.iterations, f.power, f.c_real, f.c_imag, f.scale, f."offsetX", f."offsetY", f."colourScheme", g.added_at, g.fractal_hash, f.s3_key, f.status
                 FROM gallery g
                 JOIN fractals f ON g.fractal_id = f.id
                 ${whereSql}

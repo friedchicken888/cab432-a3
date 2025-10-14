@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const { generateFractal } = require('../services/fractalGenerationService.js');
 const crypto = require('crypto');
 const { verifyToken } = require('./auth.js');
 const Fractal = require('../models/fractal.model.js');
@@ -8,8 +7,19 @@ const History = require('../models/history.model.js');
 const Gallery = require('../models/gallery.model.js');
 const s3Service = require('../services/s3Service');
 const cacheService = require('../services/cacheService');
+const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
+const awsConfigService = require('../services/awsConfigService');
 
-// Helper function to generate a consistent cache key for gallery entries
+let sqsClient;
+let queueUrl;
+
+(async () => {
+    const region = await awsConfigService.getAwsRegion();
+    sqsClient = new SQSClient({ region });
+    queueUrl = await awsConfigService.getParameter('/n11051337/sqs_queue_url');
+})();
+
+
 const generateCacheKey = (userId, filters, sortBy, sortOrder, limit, offset) => {
     const filterString = JSON.stringify(filters || {});
     const actualLimit = limit !== undefined ? limit : '';
@@ -17,13 +27,7 @@ const generateCacheKey = (userId, filters, sortBy, sortOrder, limit, offset) => 
     return `gallery:${userId}:${filterString}:${sortBy || ''}:${sortOrder || ''}:${actualLimit}:${actualOffset}`;
 };
 
-let isGenerating = false;
-
 router.get('/fractal', verifyToken, async (req, res) => {
-    if (isGenerating) {
-        return res.status(429).send('Another fractal is currently generating. Try again later.');
-    }
-
     const options = {
         width: parseInt(req.query.width) || 1920,
         height: parseInt(req.query.height) || 1080,
@@ -40,91 +44,136 @@ router.get('/fractal', verifyToken, async (req, res) => {
     };
 
     const hash = crypto.createHash('sha256').update(JSON.stringify(options)).digest('hex');
+    console.log(`Fractal generation request received for hash ${hash} from user ${req.user.username}`);
 
     try {
         let row = await Fractal.findFractalByHash(hash);
 
         if (row) {
-            // Re-verify fractal existence in DB, in case of stale cache
-            const verifiedFractal = await Fractal.getFractalById(row.id);
-            if (!verifiedFractal) {
-                // If fractal not found in DB, treat as if it was never found
-                row = null;
+            const now = new Date();
+            const lastUpdated = new Date(row.last_updated);
+            const created = new Date(row.created_at);
+            const historyEntry = await History.getHistoryEntryByFractalIdAndUserId(row.id, req.user.id);
+            const historyId = historyEntry ? historyEntry.id : null;
+
+            if (row.status === 'complete') {
+                const fractalUrl = await s3Service.getPresignedUrl(row.s3_key);
+                let galleryEntry = await Gallery.findGalleryEntryByFractalHashAndUserId(req.user.id, row.hash);
+                if (!galleryEntry) {
+                    await History.createHistoryEntry(req.user.id, req.user.username, row.id, 'complete');
+                    await Gallery.addToGallery(req.user.id, row.id, row.hash);
+                    const userCacheKey = generateCacheKey(req.user.id, {}, 'added_at', 'DESC', 5, 0);
+                    await cacheService.del(userCacheKey);
+                    const adminCacheKey = `admin:gallery:${JSON.stringify({})}:added_at:DESC:5:0`;
+                    await cacheService.del(adminCacheKey);
+                }
+                return res.json({ hash: row.hash, url: fractalUrl, status: row.status, message: 'Fractal already exists.' });
+            } else if (row.status === 'too_complex') {
+                return res.status(200).json({ hash: row.hash, status: row.status, message: 'Fractal is too complex to generate.' });
+            } else if (row.status === 'failed') {
+                if (row.retry_count === 1) {
+                    return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed. Retrying soon...' });
+                } else {
+                    return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed after multiple attempts. Please try again later.' });
+                
+                }
             } else {
-                row = verifiedFractal; // Use the verified fractal data
+                return res.status(200).json({ hash: row.hash, status: row.status, message: `Fractal is ${row.status}. Check status endpoint for updates.` });
             }
-        }
-
-        if (row) { // fractal found and verified
-            const fractalUrl = await s3Service.getPresignedUrl(row.s3_key);
-
-            let galleryEntry = await Gallery.findGalleryEntryByFractalHashAndUserId(req.user.id, row.hash);
-            let galleryId;
-
-            if (!galleryEntry) {
-                // If not in user's gallery, create history entry and add to gallery
-                await History.createHistoryEntry(req.user.id, req.user.username, row.id);
-                galleryId = await Gallery.addToGallery(req.user.id, row.id, row.hash);
-                // Invalidate the default cache key for the user's gallery
-                const userCacheKey = generateCacheKey(req.user.id, {}, 'added_at', 'DESC', 5, 0);
-                await cacheService.del(userCacheKey);
-
-                // Invalidate the default cache key for the admin gallery
-                const adminCacheKey = `admin:gallery:${JSON.stringify({})}:added_at:DESC:5:0`;
-                await cacheService.del(adminCacheKey);
-            } else {
-                galleryId = galleryEntry.id;
+        } else {
+            if (!queueUrl) {
+                return res.status(500).send('Service is not initialised correctly.');
             }
 
-            return res.json({ hash: row.hash, url: fractalUrl, galleryId: galleryId });
+            const { id: newFractalId } = await Fractal.createFractal({ ...options, hash });
 
-        } else { // fractal not found, generate new one
+            const { id: historyId } = await History.createHistoryEntry(req.user.id, req.user.username, newFractalId);
 
-            let buffer;
-            try {
-                buffer = await generateFractal(options);
-            } catch (err) {
+            const job = {
+                options,
+                hash,
+                user: req.user,
+                historyId: historyId
+            };
 
-                return res.status(500).send('Fractal generation failed');
-            } finally {
-                isGenerating = false;
-            }
+            const command = new SendMessageCommand({
+                QueueUrl: queueUrl,
+                MessageBody: JSON.stringify(job),
+            });
 
-            if (!buffer) {
-                return res.status(499).send('Fractal generation aborted due to time limit.');
-            }
+            await sqsClient.send(command);
 
-            let s3Key;
-            try {
-                s3Key = await s3Service.uploadFile(buffer, 'image/png', 'fractals', hash);
-            } catch (uploadErr) {
-
-                return res.status(500).send("Failed to upload fractal image.");
-            }
-
-            const fractalData = { ...options, hash, s3Key };
-
-            const result = await Fractal.createFractal(fractalData);
-            const createdFractal = await Fractal.findFractalByHash(hash);
-            if (!createdFractal) {
-                return res.status(500).send("Failed to retrieve newly created fractal.");
-            }
-            // History and gallery addition for newly created fractal
-            await History.createHistoryEntry(req.user.id, req.user.username, createdFractal.id);
-            const newGalleryId = await Gallery.addToGallery(req.user.id, createdFractal.id, hash);
-            // Invalidate the default cache key for the user's gallery
-            const userCacheKey = generateCacheKey(req.user.id, {}, 'added_at', 'DESC', 5, 0);
-            await cacheService.del(userCacheKey);
-
-            // Invalidate the default cache key for the admin gallery
-            const adminCacheKey = `admin:gallery:${JSON.stringify({})}:added_at:DESC:5:0`;
-            await cacheService.del(adminCacheKey);
-
-            const fractalUrl = await s3Service.getPresignedUrl(s3Key);
-            res.json({ hash, url: fractalUrl, galleryId: newGalleryId });
+            console.log(`Fractal generation request for hash ${hash} by user ${req.user.username} sent to queue. History ID: ${historyId}`);
+            res.status(202).json({ hash, status: 'pending', message: 'Fractal generation has been queued.' });
         }
     } catch (error) {
         console.error("Error in /fractal route:", error);
+        res.status(500).send("Internal server error");
+    }
+});
+
+router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
+    const { hash } = req.params;
+
+    try {
+        const row = await Fractal.findFractalByHash(hash);
+
+        if (row) {
+            if (row.status === 'complete') {
+                const fractalUrl = await s3Service.getPresignedUrl(row.s3_key);
+                res.json({ status: row.status, url: fractalUrl });
+            } else {
+                const now = new Date();
+                const lastUpdated = new Date(row.last_updated);
+                const created = new Date(row.created_at);
+                const historyEntry = await History.getHistoryEntryByFractalIdAndUserId(row.id, req.user.id);
+                const historyId = historyEntry ? historyEntry.id : null;
+
+                if (row.status === 'pending') {
+                    console.log(`Checking pending status for hash: ${hash}. Created at: ${created.toISOString()}. Current time: ${now.toISOString()}`);
+                    if ((now.getTime() - created.getTime()) > 10 * 60 * 1000) { // 10 minutes
+                        await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
+                        if (historyId) {
+                            console.log(`Attempting to update history status for historyId: ${historyId} to 'failed'`);
+                            await History.updateHistoryStatus(historyId, 'failed');
+                        } else {
+                            console.log(`History entry not found for fractal ID ${row.id} and user ID ${req.user.id}. Cannot update history status.`);
+                        }
+                        return res.json({ status: 'failed', message: 'Fractal generation stuck in queue. Please try again later.' });
+                    } else {
+                        return res.json({ status: row.status, message: 'Fractal generation has been queued.' });
+                    }
+                } else if (row.status === 'generating') {
+                    if ((now.getTime() - lastUpdated.getTime()) > 3 * 60 * 1000) { // 3 minutes
+                        await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
+                        if (historyId) {
+                            await History.updateHistoryStatus(historyId, 'failed');
+                        }
+                        if (row.retry_count + 1 === 1) {
+                            return res.json({ status: 'failed', message: 'Worker crashed. Retrying soon...' });
+                        } else {
+                            return res.json({ status: 'failed', message: 'Worker crashed after multiple attempts. Please try again later.' });
+                        }
+                    } else {
+                        return res.json({ status: row.status, message: 'Fractal is currently being generated.' });
+                    }
+                } else if (row.status === 'failed') {
+                    if (row.retry_count === 1) {
+                        return res.json({ status: row.status, message: 'Generation failed. Retrying soon...' });
+                    } else {
+                        return res.json({ status: row.status, message: 'Generation failed after multiple attempts. Please try again later.' });
+                    }
+                } else if (row.status === 'too_complex') {
+                    return res.json({ status: row.status, message: 'Fractal is too complex to generate.' });
+                } else {
+                    res.json({ status: row.status });
+                }
+            }
+        } else {
+            res.json({ status: 'not_found' });
+        }
+    } catch (error) {
+        console.error(`Error checking status for hash ${hash}:`, error);
         res.status(500).send("Internal server error");
     }
 });
