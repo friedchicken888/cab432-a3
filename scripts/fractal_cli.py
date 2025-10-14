@@ -128,15 +128,22 @@ def generate_fractal():
         r.raise_for_status()
         data = r.json()
 
-        # If the fractal was cached and returned immediately
-        if r.status_code == 200 and data.get('url'):
-            print(f"\n\x1b]8;;{data.get('url')}\x1b\\Fractal retrieved from cache successfully!\x1b]8;;\x1b\\")
-            return
+        fractal_hash = data.get('hash')
+        current_status = data.get('status')
+        message = data.get('message')
+        url = data.get('url')
 
-        # If the fractal was queued, we get a hash and need to poll
-        if r.status_code == 202 and data.get('hash'):
-            fractal_hash = data.get('hash')
-            print(f"Your fractal (hash: {fractal_hash}) is being generated.\n")
+        if current_status == 'complete' and url:
+            print(f"\n\x1b]8;;{url}\x1b\\Fractal retrieved from cache successfully!\x1b]8;;\x1b\\")
+            return
+        elif current_status == 'too_complex':
+            print(f"\n{message}")
+            return
+        elif current_status == 'failed':
+            print(f"\n{message}")
+            return
+        elif current_status == 'pending' or current_status == 'generating':
+            print(f"Your fractal (hash: {fractal_hash}) is {message}\n")
 
             POLL_INTERVAL = 5  # seconds
             MAX_ATTEMPTS = 40  # 40 attempts * 5 seconds = 200 seconds ( > 3 min timeout)
@@ -147,10 +154,17 @@ def generate_fractal():
                     status_r.raise_for_status()
                     status_data = status_r.json()
 
-                    if status_data.get('status') == 'complete':
-                        print(f"\n\n\x1b]8;;{status_data.get('url')}\x1b\\Fractal generated successfully!\x1b]8;;\x1b\\")
+                    current_status = status_data.get('status')
+                    message = status_data.get('message')
+                    url = status_data.get('url')
+
+                    if current_status == 'complete':
+                        print(f"\n\n\x1b]8;;{url}\x1b\\Fractal generated successfully!\x1b]8;;\x1b\\")
                         return
-                    else:  # status is 'pending'
+                    elif current_status == 'too_complex' or current_status == 'failed':
+                        print(f"\n\n{message}")
+                        return
+                    else:  # status is 'pending' or 'generating'
                         print(".", end="", flush=True)
                         time.sleep(POLL_INTERVAL)
 
@@ -260,9 +274,10 @@ def view_data(view_type="my_gallery", limit=None, offset=None, filters=None, sor
                     user_info = f", User: {entry.get('username')}"
                 
                 fractal_deleted = entry.get('fractal_deleted', False)
+                fractal_status = entry.get('status', 'N/A')
 
                 if fractal_deleted:
-                    print(f"ID: {entry.get('id')}, Status: Fractal Deleted{user_info}, Time: {entry.get(timestamp_field)}\n")
+                    print(f"ID: {entry.get('id')}, Status: {fractal_status} (Fractal Deleted){user_info}, Time: {entry.get(timestamp_field)}\n")
                 else:
                     fractal_hash = entry.get('hash')
                     display_hash = fractal_hash[:8] + '...' if fractal_hash else 'N/A'
@@ -278,7 +293,7 @@ def view_data(view_type="my_gallery", limit=None, offset=None, filters=None, sor
                     offset_y = entry.get('offsetY', 'N/A')
                     colour_scheme = entry.get('colourScheme', 'N/A')
 
-                    print(f"ID: {entry.get('id')}, Hash: {display_hash}{user_info}, Time: {entry.get(timestamp_field)}")
+                    print(f"ID: {entry.get('id')}, Hash: {display_hash}, Status: {fractal_status}{user_info}, Time: {entry.get(timestamp_field)}")
                     print(f"  Params: W:{width}, H:{height}, Iter:{iterations}, Power:{power}, C:{c_real}+{c_imag}i, Scale:{scale}, Offset:{offset_x},{offset_y}, Colour:{colour_scheme}\n")
             
             # New interactive section

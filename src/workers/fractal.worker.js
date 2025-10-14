@@ -114,6 +114,12 @@ async function processMessage(message) {
         await sqsClient.send(deleteCommand);
         console.log(`[${new Date().toISOString()}] Message for hash ${hash} deleted from queue.\n----------------------------------------`);
 
+    } catch (innerError) {
+        console.error(`\n--- ERROR ---\n[${new Date().toISOString()}] Failed during fractal generation or storage for hash ${hash}:`, innerError);
+        await Fractal.updateFractalStatus(hash, 'failed', (existingFractal ? existingFractal.retry_count : 0) + 1);
+        await History.updateHistoryStatus(historyId, 'failed');
+    }
+
     } catch (error) {
         console.error(`\n--- ERROR ---\n[${new Date().toISOString()}] Failed to process job for hash ${hash}:`, error);
         await Fractal.updateFractalStatus(hash, 'failed', (existingFractal ? existingFractal.retry_count : 0) + 1);
