@@ -43,7 +43,10 @@ async function initialiseDatabase() {
             "offsetY" REAL NOT NULL,
             "colourScheme" TEXT NOT NULL,
             s3_key TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'generating', 'complete', 'too_complex', 'failed')),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            retry_count INTEGER NOT NULL DEFAULT 0
         )`;
 
         await client.query(fractalsTable);
@@ -54,7 +57,7 @@ async function initialiseDatabase() {
             username TEXT NOT NULL,
             fractal_id INTEGER,
             generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (fractal_id) REFERENCES fractals (id) ON DELETE SET NULL
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'generating', 'complete', 'too_complex', 'failed', 'deleted'))
         )`;
 
         await client.query(historyTable);
@@ -96,6 +99,9 @@ async function initDbAndPool() {
         password: dbSecrets.password,
         database: dbSecrets.dbname,
         port: dbSecrets.port,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
         ssl: {
             rejectUnauthorized: false
         }

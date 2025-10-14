@@ -53,25 +53,52 @@ async function processMessage(message) {
         return;
     }
 
-    const { options, hash, user } = job;
+    const { options, hash, user, historyId } = job;
     console.log(`Generation request received for hash ${hash} from user ${user.username}`);
+
+    try {
+        let existingFractal = await Fractal.findFractalByHash(hash);
+
+        if (existingFractal && (existingFractal.status === 'complete' || existingFractal.status === 'too_complex')) {
+            console.log(`Fractal with hash ${hash} already ${existingFractal.status}. Skipping generation.`);
+            const deleteCommand = new DeleteMessageCommand({
+                QueueUrl: queueUrl,
+                ReceiptHandle: message.ReceiptHandle,
+            });
+            await sqsClient.send(deleteCommand);
+            console.log(`[${new Date().toISOString()}] Message for hash ${hash} deleted from queue (already ${existingFractal.status}).\n----------------------------------------`);
+            return;
+        }
+
+        await Fractal.updateFractalStatus(hash, 'generating', existingFractal ? existingFractal.retry_count : 0);
+        await History.updateHistoryStatus(historyId, 'generating');
 
     try {
         const buffer = await generateFractal(options);
         if (!buffer) {
             console.error(`[${new Date().toISOString()}] Fractal generation timed out or failed for hash: ${hash}\n----------------------------------------`);
+            await Fractal.updateFractalStatus(hash, 'too_complex', existingFractal ? existingFractal.retry_count : 0);
+            await History.updateHistoryStatus(historyId, 'too_complex');
             return;
         }
 
         console.log(`Storing fractal image in S3 for hash ${hash}...`);
         const s3Key = await s3Service.uploadFile(buffer, 'image/png', 'fractals', hash);
         console.log(`Storing fractal metadata in database for hash ${hash}...`);
-        const fractalData = { ...options, hash, s3Key };
 
-        const { id: newFractalId } = await Fractal.createFractal(fractalData);
-        console.log(`Adding fractal to user's history and gallery for hash ${hash}...`);
-        await History.createHistoryEntry(user.id, user.username, newFractalId);
-        await Gallery.addToGallery(user.id, newFractalId, hash);
+        let fractalIdToUse;
+        if (existingFractal) {
+            await Fractal.updateFractalStatus(hash, 'complete', 0);
+            await Fractal.updateFractalS3Key(hash, s3Key);
+            fractalIdToUse = existingFractal.id;
+        } else {
+            const fractalData = { ...options, hash, s3Key };
+            const { id: newFractalId } = await Fractal.createFractal(fractalData);
+            fractalIdToUse = newFractalId;
+        }
+
+        await History.updateHistoryStatus(historyId, 'complete');
+        await Gallery.addToGallery(user.id, fractalIdToUse, hash);
 
         const userCacheKey = `gallery:${user.id}:${JSON.stringify({})}:added_at:DESC:5:0`;
         await cacheService.del(userCacheKey);
@@ -89,6 +116,8 @@ async function processMessage(message) {
 
     } catch (error) {
         console.error(`\n--- ERROR ---\n[${new Date().toISOString()}] Failed to process job for hash ${hash}:`, error);
+        await Fractal.updateFractalStatus(hash, 'failed', (existingFractal ? existingFractal.retry_count : 0) + 1);
+        await History.updateHistoryStatus(historyId, 'failed');
         console.error('----------------------------------------');
     }
 }
