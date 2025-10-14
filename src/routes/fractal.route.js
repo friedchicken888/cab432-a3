@@ -60,7 +60,7 @@ router.get('/fractal', verifyToken, async (req, res) => {
                 const fractalUrl = await s3Service.getPresignedUrl(row.s3_key);
                 let galleryEntry = await Gallery.findGalleryEntryByFractalHashAndUserId(req.user.id, row.hash);
                 if (!galleryEntry) {
-                    await History.createHistoryEntry(req.user.id, req.user.username, row.id);
+                    await History.createHistoryEntry(req.user.id, req.user.username, row.id, 'complete');
                     await Gallery.addToGallery(req.user.id, row.id, row.hash);
                     const userCacheKey = generateCacheKey(req.user.id, {}, 'added_at', 'DESC', 5, 0);
                     await cacheService.del(userCacheKey);

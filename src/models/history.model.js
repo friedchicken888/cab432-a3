@@ -16,10 +16,10 @@ exports.getHistoryForUser = (userId) => {
     });
 };
 
-exports.createHistoryEntry = (userId, username, fractalId) => {
+exports.createHistoryEntry = (userId, username, fractalId, status = 'pending') => {
     return new Promise((resolve, reject) => {
         const sql = "INSERT INTO history (user_id, username, fractal_id, status) VALUES ($1, $2, $3, $4) RETURNING id";
-        db.query(sql, [userId, username, fractalId, 'pending'], (err, result) => {
+        db.query(sql, [userId, username, fractalId, status], (err, result) => {
             if (err) return reject(err);
             resolve({ id: result.rows[0].id });
         });
