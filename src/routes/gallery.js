@@ -25,6 +25,15 @@ router.get('/gallery', verifyToken, async (req, res) => {
             return res.json(cachedData);
         }
 
+        const { rows, totalCount } = await Gallery.getGalleryForUser(
+            userId,
+            filters,
+            sortBy,
+            sortOrder,
+            parseInt(limit),
+            parseInt(offset)
+        );
+
         const galleryWithUrls = await Promise.all(rows.map(async (entry) => {
             if (entry.s3_key) {
                 entry.url = await s3Service.getPresignedUrl(entry.s3_key);
