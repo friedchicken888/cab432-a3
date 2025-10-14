@@ -32,7 +32,7 @@ exports.createFractal = (data) => {
     return new Promise((resolve, reject) => {
         const sql = `INSERT INTO fractals (hash, width, height, iterations, power, c_real, c_imag, scale, "offsetX", "offsetY", "colourScheme", s3_key, status, retry_count) 
                      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`;
-        const params = [data.hash, data.width, data.height, data.maxIterations, data.power, data.c_real, data.c_imag, data.scale, data.offsetX, data.offsetY, data.colourScheme, data.hash, 'pending', 0];
+        const params = [data.hash, data.width, data.height, data.maxIterations, data.power, data.c.real, data.c.imag, data.scale, data.offsetX, data.offsetY, data.colourScheme, data.hash, 'pending', 0];
         db.query(sql, params, (err, result) => {
             if (err) return reject(err);
             const newFractalId = result.rows[0].id;
