@@ -131,7 +131,7 @@ router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
 
                 if (row.status === 'pending') {
                     console.log(`Checking pending status for hash: ${hash}. Created at: ${created.toISOString()}. Current time: ${now.toISOString()}`);
-                    if ((now.getTime() - created.getTime()) > 10 * 1000) { // 10 seconds
+                    if ((now.getTime() - created.getTime()) > 10 * 60 * 1000) { // 10 minutes
                         await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
                         if (historyId) {
                             console.log(`Attempting to update history status for historyId: ${historyId} to 'failed'`);
