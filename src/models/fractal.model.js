@@ -16,7 +16,7 @@ exports.findFractalByHash = async (hash) => {
     }
 
     return new Promise((resolve, reject) => {
-        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key, status, last_updated, retry_count FROM fractals WHERE hash = $1";
+        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key, status, created_at, last_updated, retry_count FROM fractals WHERE hash = $1";
         db.query(sql, [hash], (err, result) => {
             if (err) return reject(err);
             const fractal = result.rows[0];
@@ -75,7 +75,7 @@ exports.deleteFractal = async (id) => {
 
 exports.getFractalById = (id) => {
     return new Promise((resolve, reject) => {
-        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key, status FROM fractals WHERE id = $1";
+        const sql = "SELECT id, hash, width, height, iterations, power, c_real, c_imag, scale, \"offsetX\", \"offsetY\", \"colourScheme\", s3_key, status, created_at, last_updated, retry_count FROM fractals WHERE id = $1";
         db.query(sql, [id], (err, result) => {
             if (err) return reject(err);
             resolve(result.rows[0]);
