@@ -46,6 +46,7 @@ async function pollQueue() {
 
 async function processMessage(message) {
     let job;
+    let existingFractal;
     try {
         job = JSON.parse(message.Body);
     } catch (e) {
@@ -57,7 +58,7 @@ async function processMessage(message) {
     console.log(`Generation request received for hash ${hash} from user ${user.username}`);
 
     try {
-        let existingFractal = await Fractal.findFractalByHash(hash);
+        existingFractal = await Fractal.findFractalByHash(hash);
 
         if (existingFractal && (existingFractal.status === 'complete' || existingFractal.status === 'too_complex')) {
             console.log(`Fractal with hash ${hash} already ${existingFractal.status}. Skipping generation.`);
@@ -70,14 +71,14 @@ async function processMessage(message) {
             return;
         }
 
-        await Fractal.updateFractalStatus(hash, 'generating', existingFractal ? existingFractal.retry_count : 0);
+        await Fractal.updateFractalStatus(hash, 'generating', (existingFractal && existingFractal.retry_count !== null && existingFractal.retry_count !== undefined ? existingFractal.retry_count : 0));
         await History.updateHistoryStatus(historyId, 'generating');
 
     try {
         const buffer = await generateFractal(options);
         if (!buffer) {
             console.error(`[${new Date().toISOString()}] Fractal generation timed out or failed for hash: ${hash}\n----------------------------------------`);
-            await Fractal.updateFractalStatus(hash, 'too_complex', existingFractal ? existingFractal.retry_count : 0);
+            await Fractal.updateFractalStatus(hash, 'too_complex', (existingFractal && existingFractal.retry_count !== null && existingFractal.retry_count !== undefined ? existingFractal.retry_count : 0));
             await History.updateHistoryStatus(historyId, 'too_complex');
             return;
         }
@@ -116,13 +117,13 @@ async function processMessage(message) {
 
     } catch (innerError) {
         console.error(`\n--- ERROR ---\n[${new Date().toISOString()}] Failed during fractal generation or storage for hash ${hash}:`, innerError);
-        await Fractal.updateFractalStatus(hash, 'failed', (existingFractal ? existingFractal.retry_count : 0) + 1);
+        await Fractal.updateFractalStatus(hash, 'failed', (existingFractal && existingFractal.retry_count !== null && existingFractal.retry_count !== undefined ? existingFractal.retry_count : 0) + 1);
         await History.updateHistoryStatus(historyId, 'failed');
     }
 
     } catch (error) {
         console.error(`\n--- ERROR ---\n[${new Date().toISOString()}] Failed to process job for hash ${hash}:`, error);
-        await Fractal.updateFractalStatus(hash, 'failed', (existingFractal ? existingFractal.retry_count : 0) + 1);
+        await Fractal.updateFractalStatus(hash, 'failed', (existingFractal && existingFractal.retry_count !== null && existingFractal.retry_count !== undefined ? existingFractal.retry_count : 0) + 1);
         await History.updateHistoryStatus(historyId, 'failed');
         console.error('----------------------------------------');
     }

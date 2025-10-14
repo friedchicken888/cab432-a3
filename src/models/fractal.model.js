@@ -88,6 +88,7 @@ exports.updateFractalStatus = (hash, status, retryCount) => {
         const sql = "UPDATE fractals SET status = $2, last_updated = CURRENT_TIMESTAMP, retry_count = $3 WHERE hash = $1";
         db.query(sql, [hash, status, retryCount], (err, result) => {
             if (err) return reject(err);
+            cacheService.del(`fractal:hash:${hash}`);
             resolve(result);
         });
     });
