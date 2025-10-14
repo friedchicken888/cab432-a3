@@ -45,11 +45,9 @@ router.get('/fractal', verifyToken, async (req, res) => {
 
     const hash = crypto.createHash('sha256').update(JSON.stringify(options)).digest('hex');
     console.log(`Fractal generation request received for hash ${hash} from user ${req.user.username}`);
-    console.log(`Generated hash: ${hash}`);
 
     try {
         let row = await Fractal.findFractalByHash(hash);
-        console.log(`Result of findFractalByHash for hash ${hash}:`, row);
 
         if (row) {
             const now = new Date();
