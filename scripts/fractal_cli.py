@@ -146,9 +146,8 @@ def generate_fractal():
             print(f"Your fractal (hash: {fractal_hash}) is {message}\n")
 
             POLL_INTERVAL = 5  # seconds
-            MAX_ATTEMPTS = 40  # 40 attempts * 5 seconds = 200 seconds ( > 3 min timeout)
             
-            for i in range(MAX_ATTEMPTS):
+            while True:
                 try:
                     status_r = requests.get(f"{BASE_URL}/fractal/status/{fractal_hash}", headers=headers, timeout=10)
                     status_r.raise_for_status()
@@ -172,7 +171,7 @@ def generate_fractal():
                     print(f"\nError while polling for status: {poll_e}")
                     time.sleep(POLL_INTERVAL)
             
-            print("\n\nFractal generation timed out after more than 3 minutes.")
+
 
         else:
             print(f"\nUnexpected response from server: {data}")

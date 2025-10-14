@@ -75,28 +75,7 @@ router.get('/fractal', verifyToken, async (req, res) => {
                     return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed. Retrying soon...' });
                 } else {
                     return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed after multiple attempts. Please try again later.' });
-                }
-            } else if (row.status === 'pending') {
-                if ((now.getTime() - created.getTime()) > 10 * 60 * 1000) { // 10 minutes
-                    return res.status(200).json({ hash: row.hash, status: 'failed', message: 'Fractal generation stuck in queue. Please try again later.' });
-                } else {
-                    return res.status(200).json({ hash: row.hash, status: row.status, message: 'Fractal generation has been queued.' });
-                }
-            } else if (row.status === 'generating') {
-                if ((now.getTime() - lastUpdated.getTime()) > 3 * 60 * 1000) { // 3 minutes
-                    await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
-                    if (historyId) {
-                        await History.updateHistoryStatus(historyId, 'failed');
-                    }
-                    if (row.retry_count + 1 === 1) {
-                        return res.status(200).json({ hash: row.hash, status: 'failed', message: 'Worker crashed. Retrying soon...' });
-                    } else {
-                        return res.status(200).json({ hash: row.hash, status: 'failed', message: 'Worker crashed after multiple attempts. Please try again later.' });
-                    }
-                } else {
-                    return res.status(200).json({ hash: row.hash, status: row.status, message: 'Fractal is currently being generated.' });
-                }
-            }
+                
         } else {
             if (!queueUrl) {
                 return res.status(500).send('Service is not initialised correctly.');
@@ -140,7 +119,47 @@ router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
                 const fractalUrl = await s3Service.getPresignedUrl(row.s3_key);
                 res.json({ status: row.status, url: fractalUrl });
             } else {
-                res.json({ status: row.status });
+                const now = new Date();
+                const lastUpdated = new Date(row.last_updated);
+                const created = new Date(row.created_at);
+                const historyEntry = await History.getHistoryEntryByFractalIdAndUserId(row.id, req.user.id);
+                const historyId = historyEntry ? historyEntry.id : null;
+
+                if (row.status === 'pending') {
+                    if ((now.getTime() - created.getTime()) > 10 * 1000) { // 10 seconds
+                        await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
+                        if (historyId) {
+                            await History.updateHistoryStatus(historyId, 'failed');
+                        }
+                        return res.json({ status: 'failed', message: 'Fractal generation stuck in queue. Please try again later.' });
+                    } else {
+                        return res.json({ status: row.status, message: 'Fractal generation has been queued.' });
+                    }
+                } else if (row.status === 'generating') {
+                    if ((now.getTime() - lastUpdated.getTime()) > 3 * 60 * 1000) { // 3 minutes
+                        await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
+                        if (historyId) {
+                            await History.updateHistoryStatus(historyId, 'failed');
+                        }
+                        if (row.retry_count + 1 === 1) {
+                            return res.json({ status: 'failed', message: 'Worker crashed. Retrying soon...' });
+                        } else {
+                            return res.json({ status: 'failed', message: 'Worker crashed after multiple attempts. Please try again later.' });
+                        }
+                    } else {
+                        return res.json({ status: row.status, message: 'Fractal is currently being generated.' });
+                    }
+                } else if (row.status === 'failed') {
+                    if (row.retry_count === 1) {
+                        return res.json({ status: row.status, message: 'Generation failed. Retrying soon...' });
+                    } else {
+                        return res.json({ status: row.status, message: 'Generation failed after multiple attempts. Please try again later.' });
+                    }
+                } else if (row.status === 'too_complex') {
+                    return res.json({ status: row.status, message: 'Fractal is too complex to generate.' });
+                } else {
+                    res.json({ status: row.status });
+                }
             }
         } else {
             res.json({ status: 'not_found' });
