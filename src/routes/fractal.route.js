@@ -28,22 +28,20 @@ const generateCacheKey = (userId, filters, sortBy, sortOrder, limit, offset) => 
 };
 
 router.get('/fractal', verifyToken, async (req, res) => {
-    const options = {
+    const fractalOptions = {
         width: parseInt(req.query.width) || 1920,
         height: parseInt(req.query.height) || 1080,
         maxIterations: parseInt(req.query.iterations) || 500,
         power: parseFloat(req.query.power) || 2,
-        c: {
-            real: parseFloat(req.query.real) || 0.285,
-            imag: parseFloat(req.query.imag) || 0.01
-        },
+        c_real: parseFloat(req.query.real) || 0.285,
+        c_imag: parseFloat(req.query.imag) || 0.01,
         scale: parseFloat(req.query.scale) || 1,
         offsetX: parseFloat(req.query.offsetX) || 0,
         offsetY: parseFloat(req.query.offsetY) || 0,
         colourScheme: req.query.color || 'rainbow',
     };
 
-    const hash = crypto.createHash('sha256').update(JSON.stringify(options)).digest('hex');
+    const hash = crypto.createHash('sha256').update(JSON.stringify(fractalOptions)).digest('hex');
     console.log(`Fractal generation request received for hash ${hash} from user ${req.user.username}`);
 
     try {
@@ -102,12 +100,12 @@ router.get('/fractal', verifyToken, async (req, res) => {
                 return res.status(500).send('Service is not initialised correctly.');
             }
 
-            const { id: newFractalId } = await Fractal.createFractal({ ...options, hash });
+            const { id: newFractalId } = await Fractal.createFractal({ ...fractalOptions, hash });
 
             const { id: historyId } = await History.createHistoryEntry(req.user.id, req.user.username, newFractalId);
 
             const job = {
-                options,
+                options: fractalOptions,
                 hash,
                 user: req.user,
                 historyId: historyId
