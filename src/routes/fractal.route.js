@@ -133,7 +133,10 @@ router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
                     if ((now.getTime() - created.getTime()) > 10 * 1000) { // 10 seconds
                         await Fractal.updateFractalStatus(hash, 'failed', row.retry_count + 1);
                         if (historyId) {
+                            console.log(`Attempting to update history status for historyId: ${historyId} to 'failed'`);
                             await History.updateHistoryStatus(historyId, 'failed');
+                        } else {
+                            console.log(`History entry not found for fractal ID ${row.id} and user ID ${req.user.id}. Cannot update history status.`);
                         }
                         return res.json({ status: 'failed', message: 'Fractal generation stuck in queue. Please try again later.' });
                     } else {

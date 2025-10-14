@@ -164,7 +164,7 @@ def generate_fractal():
                         print(f"\n\n{message}")
                         return
                     else:  # status is 'pending' or 'generating'
-                        print(".", end="", flush=True)
+                        print(f"\r{message} ", end="", flush=True)
                         time.sleep(POLL_INTERVAL)
 
                 except requests.exceptions.RequestException as poll_e:
