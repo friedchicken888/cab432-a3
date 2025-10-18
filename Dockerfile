@@ -16,5 +16,6 @@ COPY src/services/awsConfigService.js src/services/
 COPY src/models/fractal.model.js src/models/
 COPY src/models/history.model.js src/models/
 COPY src/models/gallery.model.js src/models/
+COPY src/database.js src/
 
 CMD ["node", "src/workers/fractal.worker.js"]
