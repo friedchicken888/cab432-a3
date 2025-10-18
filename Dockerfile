@@ -1,21 +1,20 @@
-FROM node:22-bullseye
+FROM node:22-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN apt-get update && \
-    apt-get install -y \
-    build-essential \
-    python3 \
-    pkg-config \
-    libcairo2-dev \
-    libpango1.0-dev \
-    libjpeg-dev \
-    libgif-dev \
-    librsvg2-dev && \
-    npm install
+RUN apk add --no-cache python3 make g++ pkgconfig cairo-dev pango-dev jpeg-dev freetype-dev fontconfig-dev harfbuzz-dev pixman-dev giflib-dev
 
-COPY . .
+RUN npm install --omit=dev
+
+COPY src/workers/fractal.worker.js src/workers/
+COPY src/services/fractalGenerationService.js src/services/
+COPY src/services/s3Service.js src/services/
+COPY src/services/cacheService.js src/services/
+COPY src/services/awsConfigService.js src/services/
+COPY src/models/fractal.model.js src/models/
+COPY src/models/history.model.js src/models/
+COPY src/models/gallery.model.js src/models/
 
 CMD ["node", "src/workers/fractal.worker.js"]
