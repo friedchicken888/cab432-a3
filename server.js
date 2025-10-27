@@ -1,22 +1,19 @@
-
 require('dotenv').config();
-
 const express = require('express');
+const cors = require('cors');
 const { router: authRouter, verifyToken } = require('./src/routes/auth');
 const fractalRouter = require('./src/routes/fractal.route.js');
 const historyRouter = require('./src/routes/history');
 const galleryRouter = require('./src/routes/gallery');
-
 const s3Service = require('./src/services/s3Service');
 const awsConfigService = require('./src/services/awsConfigService');
 const cacheService = require('./src/services/cacheService');
-
 const app = express();
 let port;
 
+app.use(cors()); // Add this line - allows all origins
 app.use(express.json());
 app.use('/fractals', express.static('fractals'));
-
 app.use('/api/auth', authRouter);
 app.use('/api', fractalRouter);
 app.use('/api', historyRouter);
