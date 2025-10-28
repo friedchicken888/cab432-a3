@@ -225,7 +225,7 @@ async function verifyApiKey(req, res, next) {
     }
 
     try {
-        const storedApiKey = await awsConfigService.getParameter('/n11051337/dlq_api_key');
+        const storedApiKey = await awsConfigService.getParameter('/a3/group123/dlq_api_key');
         if (apiKey === storedApiKey) {
             next();
         } else {

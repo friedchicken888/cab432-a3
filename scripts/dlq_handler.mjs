@@ -1,8 +1,9 @@
-const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
-const http = require('http');
-const https = require('https');
+import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
     const ssmClient = new SSMClient({ region: process.env.AWS_REGION });
 
     let dlqApiKey;
@@ -30,7 +31,7 @@ exports.handler = async (event) => {
         try {
             const messageBody = JSON.parse(record.body);
 
-            const originalPayload = JSON.parse(messageBody.Message);
+            const originalPayload = messageBody;
 
             const fractalHash = originalPayload.hash;
             const historyId = originalPayload.historyId;
@@ -44,14 +45,14 @@ exports.handler = async (event) => {
             console.log(`Processing DLQ message for hash: ${fractalHash}, historyId: ${historyId}`);
 
             const postData = JSON.stringify({ hash: fractalHash, historyId: historyId });
-            const url = new URL(`${backendUrl}/api/fractal/dlq-failed`);
+            const requestUrl = new URL(`${backendUrl}/api/fractal/dlq-failed`);
 
-            const requestModule = url.protocol === 'https:' ? https : http;
+            const requestModule = requestUrl.protocol === 'https:' ? https : http;
 
             const options = {
-                hostname: url.hostname,
-                port: url.port || (url.protocol === 'https:' ? 443 : 80),
-                path: url.pathname + url.search,
+                hostname: requestUrl.hostname,
+                port: requestUrl.port || (requestUrl.protocol === 'https:' ? 443 : 80),
+                path: requestUrl.pathname + requestUrl.search,
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -95,7 +96,7 @@ exports.handler = async (event) => {
 
     const failedRecords = processingResults.filter(r => r.status === 'failed');
     if (failedRecords.length > 0) {
-        console.error(`${failedRecords.length} failed records.`);
+        console.error(`Lambda invocation completed with ${failedRecords.length} failed records.`);
     }
 
     return {
