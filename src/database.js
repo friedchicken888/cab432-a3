@@ -99,7 +99,7 @@ async function initDbAndPool() {
         password: dbSecrets.password,
         database: dbSecrets.dbname,
         port: dbSecrets.port,
-        max: 20,
+        max: 5,
         idleTimeoutMillis: 30000,
         connectionTimeoutMillis: 2000,
         ssl: {

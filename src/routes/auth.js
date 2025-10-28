@@ -218,5 +218,25 @@ router.post('/confirm-mfa', async (req, res) => {
     }
 });
 
+async function verifyApiKey(req, res, next) {
+    const apiKey = req.headers['x-api-key'];
+    if (!apiKey) {
+        return res.status(401).send('Access denied. No API key provided.');
+    }
+
+    try {
+        const storedApiKey = await awsConfigService.getParameter('/n11051337/dlq_api_key');
+        if (apiKey === storedApiKey) {
+            next();
+        } else {
+            res.status(403).send('Invalid API key.');
+        }
+    } catch (error) {
+        console.error('Error verifying API key:', error);
+        res.status(500).send('Internal server error during API key verification.');
+    }
+}
+
 exports.router = router;
 exports.verifyToken = verifyToken;
+exports.verifyApiKey = verifyApiKey;

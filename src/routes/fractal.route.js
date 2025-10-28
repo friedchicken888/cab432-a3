@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { verifyToken } = require('./auth.js');
+const { verifyToken, verifyApiKey } = require('./auth.js');
 const Fractal = require('../models/fractal.model.js');
 const History = require('../models/history.model.js');
 const Gallery = require('../models/gallery.model.js');
@@ -175,6 +175,34 @@ router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
     } catch (error) {
         console.error(`Error checking status for hash ${hash}:`, error);
         res.status(500).send("Internal server error");
+    }
+});
+
+router.post('/fractal/dlq-failed', verifyApiKey, async (req, res) => {
+    const { hash, historyId } = req.body;
+
+    if (!hash || !historyId) {
+        return res.status(400).send('Fractal hash and historyId are required.');
+    }
+
+    try {
+        const existingFractal = await Fractal.findFractalByHash(hash);
+
+        if (existingFractal) {
+            // Increment retry_count and set status to 'failed'
+            const newRetryCount = (existingFractal.retry_count || 0) + 1;
+            await Fractal.updateFractalStatus(hash, 'failed', newRetryCount);
+
+            // Update history status
+            await History.updateHistoryStatus(historyId, 'failed');
+
+            res.status(200).send('Fractal status updated to failed.');
+        } else {
+            res.status(404).send('Fractal not found.');
+        }
+    } catch (error) {
+        console.error(`Error updating fractal status for hash ${hash} from DLQ:`, error);
+        res.status(500).send('Internal server error.');
     }
 });
 
