@@ -75,7 +75,7 @@ router.get('/fractal', verifyToken, async (req, res) => {
                     return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed. Retrying soon...' });
                 } else {
                     return res.status(200).json({ hash: row.hash, status: row.status, message: 'Generation failed after multiple attempts. Please try again later.' });
-                
+
                 }
             } else {
                 return res.status(200).json({ hash: row.hash, status: row.status, message: `Fractal is ${row.status}. Check status endpoint for updates.` });
@@ -179,6 +179,7 @@ router.get('/fractal/status/:hash', verifyToken, async (req, res) => {
 });
 
 router.post('/fractal/dlq-failed', verifyApiKey, async (req, res) => {
+    console.log('Received DLQ notification request.');
     const { hash, historyId } = req.body;
 
     if (!hash || !historyId) {
