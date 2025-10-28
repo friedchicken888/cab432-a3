@@ -651,7 +651,8 @@ def main_menu():
     global BASE_URL
     ip_address = os.getenv('SERVER_IP', 'localhost')
     print(f"Using server IP from .env: {ip_address}")
-    BASE_URL = f"http://{ip_address}:3000/api"
+    # BASE_URL = f"http://{ip_address}:3000/api"
+    BASE_URL = f"https://api.fractals.cab432.com/api"
 
     auth_menu()
 

@@ -207,4 +207,15 @@ router.post('/fractal/dlq-failed', verifyApiKey, async (req, res) => {
     }
 });
 
+router.get('/health', async (req, res) => {
+    try {
+        const db = require('../database.js');
+        await db.query('SELECT 1');
+        res.status(200).send('OK');
+    } catch (error) {
+        console.error('Health check failed:', error);
+        res.status(500).send('Error');
+    }
+});
+
 module.exports = router;
